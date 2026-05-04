@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Talky — Interactive Talk</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@400;500;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0f0d;--card:#111a15;--card2:#162019;--border:#1e3028;--border2:#2a4038;
+  --text:#e8f5ef;--muted:#6b9980;--accent:#1fcc84;--accent2:#17a066;--accent3:#0d6b44;
+  --danger:#e05252;--warn:#e0a852;--r:10px;--r2:16px;
+}
+body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+
+/* LANDING */
+#s-land{background:var(--bg);position:relative;overflow:hidden}
+.land-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.2}
+.orb1{width:500px;height:500px;background:#1fcc84;top:-150px;left:-100px}
+.orb2{width:400px;height:400px;background:#0d6b44;bottom:-100px;right:-80px}
+.orb3{width:300px;height:300px;background:#17a066;top:40%;left:50%;transform:translateX(-50%)}
+.land-nav{display:flex;align-items:center;justify-content:space-between;padding:24px 32px;position:relative;z-index:2}
+.nav-logo{font-family:'Clash Display',sans-serif;font-size:24px;font-weight:700;color:var(--accent);letter-spacing:-0.5px}
+.nav-pill{font-size:13px;padding:8px 18px;border-radius:20px;border:1px solid var(--border2);color:var(--muted);cursor:pointer;background:transparent;transition:all .2s;font-family:'Cabinet Grotesk',sans-serif}
+.nav-pill:hover{border-color:var(--accent);color:var(--accent)}
+.land-hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem 2rem;position:relative;z-index:2;gap:1.5rem}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:6px 14px;border-radius:20px;border:1px solid var(--border2);color:var(--muted);margin-bottom:4px}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.hero-title{font-family:'Clash Display',sans-serif;font-size:clamp(36px,6vw,56px);font-weight:700;line-height:1.1;letter-spacing:-1.5px;color:var(--text)}
+.hero-title em{color:var(--accent);font-style:normal}
+.hero-sub{font-size:17px;color:var(--muted);max-width:420px;line-height:1.7}
+.hero-cta{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;margin-top:8px}
+.btn-main{padding:16px 28px;border-radius:var(--r);background:var(--accent);color:#061208;font-family:'Cabinet Grotesk',sans-serif;font-size:16px;font-weight:700;border:none;cursor:pointer;transition:all .15s}
+.btn-main:hover{background:#25e892;transform:translateY(-1px)}
+.btn-outline{padding:14px 28px;border-radius:var(--r);background:transparent;color:var(--muted);font-family:'Cabinet Grotesk',sans-serif;font-size:15px;font-weight:500;border:1px solid var(--border2);cursor:pointer;transition:all .15s}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+.hero-stats{display:flex;gap:32px;margin-top:8px}
+.hstat{text-align:center}
+.hstat-n{font-family:'Clash Display',sans-serif;font-size:24px;font-weight:700;color:var(--accent)}
+.hstat-l{font-size:12px;color:var(--muted);margin-top:3px}
+.land-features{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:0 32px 32px;position:relative;z-index:2;max-width:900px;margin:0 auto;width:100%}
+.feat{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;transition:border-color .2s}
+.feat:hover{border-color:var(--border2)}
+.feat-icon{font-size:20px;margin-bottom:10px}
+.feat-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:5px}
+.feat-desc{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* SETUP */
+#s-setup{padding:28px;gap:20px;align-items:center;overflow-y:auto}
+.setup-logo{font-family:'Clash Display',sans-serif;font-size:20px;font-weight:700;color:var(--accent)}
+.setup-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:22px;width:100%;max-width:500px}
+.setup-card h3{font-family:'Clash Display',sans-serif;font-size:17px;font-weight:600;color:var(--text);margin-bottom:5px}
+.setup-card p{font-size:13px;color:var(--muted);margin-bottom:16px}
+.tag-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.tag{padding:7px 15px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:transparent;transition:all .15s;font-family:'Cabinet Grotesk',sans-serif}
+.tag:hover{border-color:var(--border2);color:var(--text)}
+.tag.on{background:rgba(31,204,132,.12);border-color:var(--accent);color:var(--accent)}
+.country-row select{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;color:var(--text);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;appearance:none;cursor:pointer}
+.country-row select:focus{outline:none;border-color:var(--accent)}
+.region-tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.rtab{padding:6px 14px;border-radius:20px;font-size:12px;border:1px solid var(--border);color:var(--muted);cursor:pointer;background:transparent;font-family:'Cabinet Grotesk',sans-serif;transition:all .15s}
+.rtab.on{background:rgba(31,204,132,.12);border-color:var(--accent);color:var(--accent)}
+.go-btn{width:100%;padding:15px;border-radius:var(--r);background:var(--accent);color:#061208;font-family:'Cabinet Grotesk',sans-serif;font-size:16px;font-weight:700;border:none;cursor:pointer;transition:all .15s}
+.go-btn:hover{background:#25e892}
+
+/* FINDING */
+#s-find{align-items:center;justify-content:center;gap:20px;padding:28px;min-height:100vh}
+.find-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:2.5rem;text-align:center;width:100%;max-width:380px}
+.sonar{width:90px;height:90px;border-radius:50%;background:rgba(31,204,132,.1);border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;position:relative}
+.sonar::before,.sonar::after{content:'';position:absolute;border-radius:50%;border:1px solid var(--accent);animation:sonar-ring 2s infinite}
+.sonar::before{width:100%;height:100%}
+.sonar::after{width:150%;height:150%;animation-delay:.4s;left:-25%;top:-25%}
+@keyframes sonar-ring{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
+.sonar-icon{font-size:28px}
+.find-card h3{font-family:'Clash Display',sans-serif;font-size:20px;font-weight:600;color:var(--text);margin-bottom:8px}
+.find-card p{font-size:14px;color:var(--muted);line-height:1.6}
+.find-filters{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:14px}
+.ff{font-size:12px;padding:5px 12px;border-radius:20px;background:rgba(31,204,132,.1);border:1px solid rgba(31,204,132,.3);color:var(--accent)}
+.cancel-btn{padding:12px 32px;border-radius:var(--r);background:transparent;color:var(--muted);border:1px solid var(--border);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;cursor:pointer;transition:all .15s}
+.cancel-btn:hover{border-color:var(--border2);color:var(--text)}
+
+/* MUSIC PLAYER */
+.music-player{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;width:100%;max-width:380px}
+.mp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.mp-label{font-size:11px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
+.mp-vol-row{display:flex;align-items:center;gap:8px}
+.mp-vol-icon{font-size:13px;color:var(--muted)}
+.mp-vol{-webkit-appearance:none;appearance:none;width:80px;height:3px;border-radius:2px;background:var(--border2);outline:none;cursor:pointer}
+.mp-vol::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer}
+.mp-track{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.mp-disc{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#1a2e22,#0d6b44);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.mp-disc.spinning{animation:spin 4s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.mp-info{flex:1;min-width:0}
+.mp-title{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-artist{font-size:12px;color:var(--muted);margin-top:2px}
+.mp-progress-wrap{margin-bottom:12px}
+.mp-bar-bg{height:4px;background:var(--border2);border-radius:2px;cursor:pointer;position:relative}
+.mp-bar-fill{height:4px;background:var(--accent);border-radius:2px;width:0%;transition:width .5s linear;pointer-events:none}
+.mp-times{display:flex;justify-content:space-between;margin-top:5px}
+.mp-time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.mp-controls{display:flex;align-items:center;justify-content:center;gap:14px}
+.mp-btn{background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:4px 8px;border-radius:6px;transition:color .15s;line-height:1}
+.mp-btn:hover{color:var(--text)}
+.mp-btn.play{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#061208;display:flex;align-items:center;justify-content:center;font-size:15px}
+.mp-btn.play:hover{background:#25e892}
+
+/* CALL */
+#s-call{padding:20px;gap:14px;align-items:center;overflow-y:auto;min-height:100vh;justify-content:center}
+.call-wrap{width:100%;max-width:520px;display:flex;flex-direction:column;gap:14px}
+.call-top{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px 20px;display:flex;align-items:center;justify-content:space-between}
+.stranger-info{display:flex;align-items:center;gap:14px}
+.av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;font-family:'Clash Display',sans-serif;flex-shrink:0}
+.av-them{background:rgba(31,204,132,.15);color:var(--accent);border:1px solid rgba(31,204,132,.3)}
+.s-name{font-size:15px;font-weight:700;color:var(--text)}
+.s-meta{font-size:13px;color:var(--muted);margin-top:2px}
+.call-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.call-timer{font-size:15px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;font-family:'Clash Display',sans-serif}
+.call-flag{font-size:22px}
+.conn-status{font-size:11px;padding:3px 10px;border-radius:10px;font-weight:600}
+.conn-status.connecting{background:rgba(224,168,82,.15);color:var(--warn);border:1px solid rgba(224,168,82,.3)}
+.conn-status.connected{background:rgba(31,204,132,.12);color:var(--accent);border:1px solid rgba(31,204,132,.3)}
+.vis-area{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.vis-bars{display:flex;align-items:center;justify-content:center;gap:3px;height:52px}
+.vb{width:3px;border-radius:2px;background:var(--border2);transition:height .1s ease,background .1s}
+.vb.a{background:var(--accent)}
+.vis-who{font-size:13px;color:var(--muted)}
+.chat-area{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;display:flex;flex-direction:column;gap:10px;max-height:180px;overflow-y:auto}
+.msg{max-width:78%;padding:9px 14px;border-radius:12px;font-size:14px;line-height:1.5}
+.msg.them{background:var(--card2);color:var(--text);align-self:flex-start;border-radius:4px 12px 12px 12px}
+.msg.you{background:rgba(31,204,132,.15);color:#7eebb7;align-self:flex-end;border-radius:12px 4px 12px 12px}
+.msg.sys{align-self:center;background:transparent;color:var(--muted);font-size:12px;font-style:italic}
+.msg-t{font-size:11px;color:var(--muted);margin-top:4px}
+.inp-row{display:flex;gap:10px}
+.inp-row input{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;color:var(--text);font-family:'Cabinet Grotesk',sans-serif;font-size:14px}
+.inp-row input::placeholder{color:var(--muted)}
+.inp-row input:focus{outline:none;border-color:var(--accent)}
+.send-btn{padding:12px 20px;background:var(--accent);color:#061208;border:none;border-radius:var(--r);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+.send-btn:hover{background:#25e892}
+.ctrl-row{display:flex;gap:10px}
+.ctrl{flex:1;padding:13px 8px;border-radius:var(--r);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;text-align:center}
+.ctrl:hover{border-color:var(--border2);color:var(--text)}
+.ctrl.mute-on{background:rgba(224,82,82,.1);border-color:rgba(224,82,82,.4);color:var(--danger)}
+.ctrl.add-friend{background:rgba(31,204,132,.1);border-color:rgba(31,204,132,.3);color:var(--accent)}
+.ctrl.skip{border-color:rgba(224,168,82,.3);color:var(--warn)}
+.ctrl.end{background:rgba(224,82,82,.1);border-color:rgba(224,82,82,.4);color:var(--danger)}
+
+/* MIC PERMISSION */
+.mic-banner{background:rgba(224,82,82,.08);border:1px solid rgba(224,82,82,.25);border-radius:var(--r);padding:12px 16px;font-size:13px;color:#e08585;text-align:center;display:none}
+.mic-banner.show{display:block}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);color:#061208;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;font-family:'Cabinet Grotesk',sans-serif}
+.toast.show{opacity:1}
+
+/* FRIENDS */
+#s-friends{padding:28px;gap:16px;align-items:center;overflow-y:auto}
+.friends-header{display:flex;align-items:center;gap:14px;width:100%;max-width:500px}
+.back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);padding:9px 16px;border-radius:var(--r);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;cursor:pointer;transition:all .15s}
+.back-btn:hover{border-color:var(--border2);color:var(--text)}
+.friends-title{font-family:'Clash Display',sans-serif;font-size:20px;font-weight:700;color:var(--text)}
+.friends-list{width:100%;max-width:500px;display:flex;flex-direction:column;gap:10px}
+.friend-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;transition:border-color .15s}
+.friend-card:hover{border-color:var(--border2)}
+.friend-left{display:flex;align-items:center;gap:14px}
+.friend-av{width:42px;height:42px;border-radius:50%;background:rgba(31,204,132,.15);border:1px solid rgba(31,204,132,.3);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);font-family:'Clash Display',sans-serif}
+.friend-name{font-size:15px;font-weight:700;color:var(--text)}
+.friend-meta{font-size:13px;color:var(--muted);margin-top:2px}
+.reconnect-btn{padding:8px 16px;border-radius:var(--r);background:rgba(31,204,132,.1);border:1px solid rgba(31,204,132,.3);color:var(--accent);font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
+.reconnect-btn:hover{background:rgba(31,204,132,.2)}
+.empty-friends{text-align:center;color:var(--muted);font-size:15px;padding:2.5rem;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);width:100%;max-width:500px}
+.empty-friends span{display:block;font-size:32px;margin-bottom:12px}
+
+@media(max-width:600px){
+  .land-features{grid-template-columns:1fr 1fr}
+  .land-nav{padding:16px 20px}
+  .land-hero{padding:2rem 1.25rem}
+  .hero-stats{gap:20px}
+  #s-setup,#s-find,#s-call,#s-friends{padding:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- Hidden audio element for remote stream -->
+<audio id="remote-audio" autoplay playsinline></audio>
+
+<div id="toast" class="toast"></div>
+
+<!-- LANDING -->
+<div id="s-land" class="screen active">
+  <div class="land-bg"><div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div></div>
+  <nav class="land-nav">
+    <div class="nav-logo">Talky</div>
+    <button class="nav-pill" onclick="goFriends()">My Friends</button>
+  </nav>
+  <div class="land-hero">
+    <div class="hero-badge"><div class="badge-dot"></div><span id="online-count">—</span> people online now</div>
+    <h1 class="hero-title">Interactive Talk.<br><em>Voice only.</em></h1>
+    <p class="hero-sub">No camera. No signup. Just connect with real people around the world — instantly and anonymously.</p>
+    <div class="hero-stats">
+      <div class="hstat"><div class="hstat-n">1M+</div><div class="hstat-l">community</div></div>
+      <div class="hstat"><div class="hstat-n">47</div><div class="hstat-l">countries</div></div>
+      <div class="hstat"><div class="hstat-n">Free</div><div class="hstat-l">always</div></div>
+    </div>
+    <div class="hero-cta">
+      <button class="btn-main" onclick="goSetup()">Start Voice Chat</button>
+      <button class="btn-outline" onclick="goFriends()">View My Friends</button>
+    </div>
+  </div>
+  <div class="land-features">
+    <div class="feat"><div class="feat-icon">🌍</div><div class="feat-title">Country Filter</div><div class="feat-desc">Pick a region or country to connect with.</div></div>
+    <div class="feat"><div class="feat-icon">🎯</div><div class="feat-title">Interests</div><div class="feat-desc">Match with people who share your hobbies.</div></div>
+    <div class="feat"><div class="feat-icon">🎵</div><div class="feat-title">Waiting Music</div><div class="feat-desc">Chill instrumentals while you find a match.</div></div>
+    <div class="feat"><div class="feat-icon">👥</div><div class="feat-title">Friends</div><div class="feat-desc">Save and reconnect with great matches.</div></div>
+    <div class="feat"><div class="feat-icon">🔒</div><div class="feat-title">Anonymous</div><div class="feat-desc">No account needed. Your privacy is protected.</div></div>
+    <div class="feat"><div class="feat-icon">⚡</div><div class="feat-title">Instant</div><div class="feat-desc">Connect in seconds with a single click.</div></div>
+  </div>
+</div>
+
+<!-- SETUP -->
+<div id="s-setup" class="screen">
+  <div class="setup-logo">Talky</div>
+  <div class="setup-card">
+    <h3>Your interests</h3>
+    <p>Pick at least one to get better matches</p>
+    <div class="tag-wrap" id="interest-tags">
+      <div class="tag" onclick="toggleTag(this)">Music</div>
+      <div class="tag" onclick="toggleTag(this)">Gaming</div>
+      <div class="tag" onclick="toggleTag(this)">Travel</div>
+      <div class="tag" onclick="toggleTag(this)">Movies</div>
+      <div class="tag" onclick="toggleTag(this)">Language practice</div>
+      <div class="tag" onclick="toggleTag(this)">Sports</div>
+      <div class="tag" onclick="toggleTag(this)">Tech</div>
+      <div class="tag" onclick="toggleTag(this)">Cooking</div>
+      <div class="tag" onclick="toggleTag(this)">Books</div>
+      <div class="tag" onclick="toggleTag(this)">Art</div>
+      <div class="tag" onclick="toggleTag(this)">Just chat</div>
+    </div>
+  </div>
+  <div class="setup-card">
+    <h3>Country / region</h3>
+    <p>Match with people from a specific place, or go worldwide</p>
+    <div class="region-tabs" id="region-tabs">
+      <button class="rtab on" onclick="setRegion(this,'any')">Worldwide</button>
+      <button class="rtab" onclick="setRegion(this,'europe')">Europe</button>
+      <button class="rtab" onclick="setRegion(this,'americas')">Americas</button>
+      <button class="rtab" onclick="setRegion(this,'asia')">Asia</button>
+      <button class="rtab" onclick="setRegion(this,'other')">Other</button>
+    </div>
+    <div class="country-row"><select id="country-select"></select></div>
+  </div>
+  <div style="width:100%;max-width:500px;display:flex;flex-direction:column;gap:12px">
+    <button class="go-btn" onclick="goFinding()">Find Someone</button>
+    <button class="btn-outline" onclick="show('s-land')" style="width:100%">Back</button>
+  </div>
+</div>
+
+<!-- FINDING -->
+<div id="s-find" class="screen">
+  <div class="find-card">
+    <div class="sonar"><div class="sonar-icon">🎙</div></div>
+    <h3>Finding your match...</h3>
+    <p>Searching across <span id="find-region-label">worldwide</span></p>
+    <div class="find-filters" id="find-filters"></div>
+  </div>
+  <div class="music-player">
+    <div class="mp-header">
+      <div class="mp-label">Waiting room music</div>
+      <div class="mp-vol-row">
+        <div class="mp-vol-icon">🔈</div>
+        <input type="range" class="mp-vol" id="mp-vol" min="0" max="100" value="60" oninput="setVol(this.value)">
+        <div class="mp-vol-icon">🔊</div>
+      </div>
+    </div>
+    <div class="mp-track">
+      <div class="mp-disc" id="mp-disc">🎵</div>
+      <div class="mp-info">
+        <div class="mp-title" id="mp-title">Midnight Lounge</div>
+        <div class="mp-artist" id="mp-artist">Talky Instrumentals</div>
+      </div>
+    </div>
+    <div class="mp-progress-wrap">
+      <div class="mp-bar-bg" onclick="seekTrack(event)">
+        <div class="mp-bar-fill" id="mp-fill"></div>
+      </div>
+      <div class="mp-times">
+        <span class="mp-time" id="mp-cur">0:00</span>
+        <span class="mp-time" id="mp-dur">3:00</span>
+      </div>
+    </div>
+    <div class="mp-controls">
+      <button class="mp-btn" onclick="prevTrack()">⏮</button>
+      <button class="mp-btn play" id="mp-play-btn" onclick="togglePlay()">▶</button>
+      <button class="mp-btn" onclick="nextTrack()">⏭</button>
+    </div>
+  </div>
+  <button class="cancel-btn" onclick="cancelFind()">Cancel</button>
+</div>
+
+<!-- CALL -->
+<div id="s-call" class="screen">
+  <div class="call-wrap">
+    <div class="mic-banner" id="mic-banner">🎤 Microphone access denied — the other person can't hear you. Please allow mic access and refresh.</div>
+    <div class="call-top">
+      <div class="stranger-info">
+        <div class="av av-them" id="call-av">?</div>
+        <div>
+          <div class="s-name" id="call-name">Stranger</div>
+          <div class="s-meta" id="call-meta">Connecting...</div>
+        </div>
+      </div>
+      <div class="call-right">
+        <div class="call-flag" id="call-flag">🌍</div>
+        <span class="conn-status connecting" id="conn-status">Connecting</span>
+        <div class="call-timer" id="call-timer">00:00</div>
+      </div>
+    </div>
+    <div class="vis-area">
+      <div class="vis-bars" id="vis-bars"></div>
+      <div class="vis-who" id="vis-who">Waiting for audio...</div>
+    </div>
+    <div class="chat-area" id="chat-box"></div>
+    <div class="inp-row">
+      <input type="text" id="chat-inp" placeholder="Type a message..."/>
+      <button class="send-btn" onclick="sendMsg()">Send</button>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl" id="mute-btn" onclick="toggleMute()">Mute</button>
+      <button class="ctrl add-friend" onclick="addFriend()">+ Friend</button>
+      <button class="ctrl skip" onclick="skipCall()">Skip</button>
+      <button class="ctrl end" onclick="endCall()">End</button>
+    </div>
+  </div>
+</div>
+
+<!-- FRIENDS -->
+<div id="s-friends" class="screen">
+  <div class="friends-header">
+    <button class="back-btn" onclick="show('s-land')">← Back</button>
+    <div class="friends-title">Friends</div>
+  </div>
+  <div class="friends-list" id="friends-list"></div>
+</div>
+
+<script>
+/* ── DATA ── */
+const COUNTRIES={any:['Any country'],europe:['Germany','France','United Kingdom','Spain','Italy','Netherlands','Sweden','Poland','Portugal','Norway','Denmark','Finland','Belgium','Switzerland','Austria'],americas:['United States','Canada','Brazil','Mexico','Argentina','Colombia','Chile','Peru','Venezuela','Ecuador'],asia:['Japan','South Korea','India','China','Indonesia','Philippines','Thailand','Vietnam','Malaysia','Singapore','Pakistan','Bangladesh'],other:['Australia','New Zealand','South Africa','Nigeria','Kenya','Egypt','Turkey','UAE','Saudi Arabia','Israel','Morocco']};
+const FLAGS={Germany:'🇩🇪',France:'🇫🇷','United Kingdom':'🇬🇧',Spain:'🇪🇸',Italy:'🇮🇹',Netherlands:'🇳🇱',Sweden:'🇸🇪',Poland:'🇵🇱',Portugal:'🇵🇹',Norway:'🇳🇴',Denmark:'🇩🇰',Finland:'🇫🇮',Belgium:'🇧🇪',Switzerland:'🇨🇭',Austria:'🇦🇹','United States':'🇺🇸',Canada:'🇨🇦',Brazil:'🇧🇷',Mexico:'🇲🇽',Argentina:'🇦🇷',Colombia:'🇨🇴',Chile:'🇨🇱',Peru:'🇵🇪',Venezuela:'🇻🇪',Ecuador:'🇪🇨',Japan:'🇯🇵','South Korea':'🇰🇷',India:'🇮🇳',China:'🇨🇳',Indonesia:'🇮🇩',Philippines:'🇵🇭',Thailand:'🇹🇭',Vietnam:'🇻🇳',Malaysia:'🇲🇾',Singapore:'🇸🇬',Pakistan:'🇵🇰',Bangladesh:'🇧🇩',Australia:'🇦🇺','New Zealand':'🇳🇿','South Africa':'🇿🇦',Nigeria:'🇳🇬',Kenya:'🇰🇪',Egypt:'🇪🇬',Turkey:'🇹🇷',UAE:'🇦🇪','Saudi Arabia':'🇸🇦',Israel:'🇮🇱',Morocco:'🇲🇦'};
+const TRACKS=[{title:'Midnight Lounge',artist:'Talky Instrumentals',emoji:'🌙',bpm:72,key:'Am'},{title:'Still Water',artist:'Talky Instrumentals',emoji:'🌊',bpm:60,key:'Dm'},{title:'Gentle Drift',artist:'Talky Instrumentals',emoji:'🍃',bpm:80,key:'Gm'},{title:'City Rain',artist:'Talky Instrumentals',emoji:'🌧',bpm:68,key:'Em'},{title:'Soft Current',artist:'Talky Instrumentals',emoji:'✨',bpm:75,key:'Cm'}];
+const SCALES={Am:[220,261.6,293.7,329.6,349.2,392,440,523.3],Dm:[146.8,174.6,196,220,233.1,261.6,293.7,349.2],Gm:[196,220,233.1,261.6,293.7,311.1,349.2,392],Em:[164.8,196,220,246.9,261.6,293.7,329.6,392],Cm:[130.8,155.6,174.6,196,207.7,233.1,261.6,311.1]};
+
+/* ── SOCKET.IO ── */
+const socket = io();
+socket.on('connect', () => {
+  console.log('Connected to signaling server:', socket.id);
+  document.getElementById('online-count').textContent = '—';
+});
+socket.on('disconnect', () => showToast('Disconnected from server'));
+
+/* ── WebRTC STATE ── */
+let peerConnection = null;
+let localStream = null;
+let currentRoomId = null;
+let currentStranger = null;
+let analyserNode = null, audioCtxRTC = null;
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+async function getMic() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    document.getElementById('mic-banner').classList.remove('show');
+    return true;
+  } catch (e) {
+    console.warn('Mic denied:', e);
+    document.getElementById('mic-banner').classList.add('show');
+    return false;
+  }
+}
+
+function setupAnalyser(stream) {
+  try {
+    audioCtxRTC = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtxRTC.createMediaStreamSource(stream);
+    analyserNode = audioCtxRTC.createAnalyser();
+    analyserNode.fftSize = 64;
+    src.connect(analyserNode);
+  } catch(e) { console.warn('Analyser error:', e); }
+}
+
+function createPeerConnection(roomId) {
+  peerConnection = new RTCPeerConnection(RTC_CONFIG);
+
+  // Add local tracks
+  if (localStream) {
+    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  }
+
+  // Remote audio
+  peerConnection.ontrack = (e) => {
+    const remoteAudio = document.getElementById('remote-audio');
+    remoteAudio.srcObject = e.streams[0];
+    document.getElementById('vis-who').textContent = 'Stranger is speaking...';
+    setupAnalyser(e.streams[0]);
+  };
+
+  // ICE candidates
+  peerConnection.onicecandidate = (e) => {
+    if (e.candidate) {
+      socket.emit('signal', { roomId, data: { type: 'candidate', candidate: e.candidate } });
+    }
+  };
+
+  peerConnection.onconnectionstatechange = () => {
+    const state = peerConnection.connectionState;
+    const el = document.getElementById('conn-status');
+    if (state === 'connected') {
+      el.textContent = 'Live'; el.className = 'conn-status connected';
+      startTimer();
+    } else if (state === 'connecting') {
+      el.textContent = 'Connecting'; el.className = 'conn-status connecting';
+    } else if (state === 'failed' || state === 'disconnected') {
+      el.textContent = 'Lost'; el.className = 'conn-status connecting';
+      addSysMsg('Connection lost.');
+    }
+  };
+
+  return peerConnection;
+}
+
+async function startAsInitiator(roomId) {
+  currentRoomId = roomId;
+  createPeerConnection(roomId);
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+  socket.emit('signal', { roomId, data: { type: 'offer', sdp: offer } });
+}
+
+async function handleSignal({ from, data }) {
+  if (!peerConnection) return;
+  if (data.type === 'offer') {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('signal', { roomId: currentRoomId, data: { type: 'answer', sdp: answer } });
+  } else if (data.type === 'answer') {
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+  } else if (data.type === 'candidate') {
+    try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e) {}
+  }
+}
+
+/* ── SOCKET EVENTS ── */
+socket.on('waiting', () => {
+  document.querySelector('#s-find .find-card p').textContent = 'Waiting for someone to join...';
+});
+
+socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInterests }) => {
+  stopMusic();
+  currentRoomId = roomId;
+  currentStranger = {
+    name: 'Stranger #' + peerId.slice(-4).toUpperCase(),
+    country: peerCountry || 'Unknown',
+    interests: peerInterests || [],
+    initial: '?'
+  };
+
+  // Update call UI
+  document.getElementById('call-av').textContent = '?';
+  document.getElementById('call-name').textContent = currentStranger.name;
+  document.getElementById('call-meta').textContent =
+    (peerCountry ? (FLAGS[peerCountry] || '🌍') + ' ' + peerCountry : 'Worldwide') +
+    (peerInterests && peerInterests.length ? ' · ' + peerInterests.join(', ') : '');
+  document.getElementById('call-flag').textContent = FLAGS[peerCountry] || '🌍';
+  document.getElementById('conn-status').textContent = 'Connecting';
+  document.getElementById('conn-status').className = 'conn-status connecting';
+
+  const box = document.getElementById('chat-box');
+  box.innerHTML = '';
+  addSysMsg('Connected! Say hello 👋');
+
+  buildBars(); startVisBars();
+  show('s-call');
+
+  await getMic();
+  createPeerConnection(roomId);
+  if (isInitiator) await startAsInitiator(roomId);
+});
+
+socket.on('signal', handleSignal);
+
+socket.on('peer_left', () => {
+  addSysMsg('Stranger left the chat.');
+  document.getElementById('conn-status').textContent = 'Ended';
+  document.getElementById('conn-status').className = 'conn-status connecting';
+  clearCall();
+  showToast('Stranger left — find a new match!');
+});
+
+socket.on('chat_message', ({ message }) => {
+  addMsg(message, 'them');
+});
+
+/* ── APP STATE ── */
+let currentRegion = 'any';
+let timerInt, visBarsInt, timerSecs = 0, muted = false;
+let friends = []; try { friends = JSON.parse(localStorage.getItem('talky_friends') || '[]'); } catch(e) {}
+let msgTimeout;
+
+// Music
+let actx=null, gainNode=null, musicNodes=[], isPlaying=false, currentTrack=0;
+let mpTick=null, mpSec=0, mpDur=180;
+
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function goSetup(){stopMusic();show('s-setup');}
+function goFriends(){renderFriends();show('s-friends');}
+function toggleTag(el){el.classList.toggle('on');}
+
+function setRegion(el,region){
+  currentRegion=region;
+  document.querySelectorAll('.rtab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  const sel=document.getElementById('country-select');sel.innerHTML='';
+  const countries=region==='any'?['Any country']:['Any '+el.textContent,...COUNTRIES[region]];
+  countries.forEach(c=>{const o=document.createElement('option');o.value=c==='Any country'||c.startsWith('Any ')?'':c;o.textContent=c;sel.appendChild(o);});
+}
+
+function goFinding(){
+  const tags=[...document.querySelectorAll('#interest-tags .tag.on')].map(t=>t.textContent);
+  const country=document.getElementById('country-select').value;
+  document.getElementById('find-region-label').textContent=country||(currentRegion==='any'?'worldwide':currentRegion);
+  const ff=document.getElementById('find-filters');ff.innerHTML='';
+  tags.forEach(t=>{const d=document.createElement('div');d.className='ff';d.textContent=t;ff.appendChild(d);});
+  if(country){const d=document.createElement('div');d.className='ff';d.textContent=(FLAGS[country]||'🌍')+' '+country;ff.appendChild(d);}
+  show('s-find');
+  setTimeout(()=>startMusic(),100);
+  socket.emit('find_match', { interests: tags, country });
+}
+
+function cancelFind(){
+  stopMusic();
+  socket.emit('skip', { roomId: null });
+  show('s-setup');
+}
+
+function skipCall(){
+  cleanupWebRTC();
+  socket.emit('skip', { roomId: currentRoomId });
+  currentRoomId = null;
+  stopMusic();
+  goFinding();
+}
+
+function endCall(){
+  cleanupWebRTC();
+  socket.emit('skip', { roomId: currentRoomId });
+  currentRoomId = null;
+  stopMusic();
+  show('s-setup');
+}
+
+function cleanupWebRTC(){
+  clearCall();
+  if(peerConnection){ try{ peerConnection.close(); }catch(e){} peerConnection=null; }
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  if(audioCtxRTC){ try{ audioCtxRTC.close(); }catch(e){} audioCtxRTC=null; analyserNode=null; }
+  document.getElementById('remote-audio').srcObject = null;
+}
+
+function clearCall(){clearInterval(timerInt);clearInterval(visBarsInt);clearTimeout(msgTimeout);timerSecs=0;}
+function buildBars(){const w=document.getElementById('vis-bars');w.innerHTML='';for(let i=0;i<24;i++){const d=document.createElement('div');d.className='vb';d.style.height='4px';w.appendChild(d);}}
+
+function startVisBars(){
+  clearInterval(visBarsInt);
+  visBarsInt=setInterval(()=>{
+    const bars=document.querySelectorAll('.vb');
+    if(analyserNode){
+      const data=new Uint8Array(analyserNode.frequencyBinCount);
+      analyserNode.getByteFrequencyData(data);
+      bars.forEach((b,i)=>{
+        const h=Math.max(4,(data[i%data.length]/255)*48);
+        b.style.height=h+'px';
+        b.classList.toggle('a',h>20);
+      });
+    } else {
+      const active=Math.random()>.3;
+      bars.forEach(b=>{const h=active?Math.floor(Math.random()*40)+6:4;b.style.height=h+'px';b.classList.toggle('a',active&&h>20);});
+    }
+  },80);
+}
+
+function startTimer(){clearInterval(timerInt);timerSecs=0;timerInt=setInterval(()=>{timerSecs++;const m=String(Math.floor(timerSecs/60)).padStart(2,'0');const s=String(timerSecs%60).padStart(2,'0');document.getElementById('call-timer').textContent=m+':'+s;},1000);}
+
+function addMsg(text,who){const box=document.getElementById('chat-box');const d=document.createElement('div');d.className='msg '+who;const now=new Date();const t=now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');d.innerHTML=text+(who!=='sys'?'<div class="msg-t">'+t+'</div>':'');box.appendChild(d);box.scrollTop=box.scrollHeight;}
+function addSysMsg(text){addMsg(text,'sys');}
+
+function sendMsg(){
+  const inp=document.getElementById('chat-inp');
+  if(!inp.value.trim()||!currentRoomId)return;
+  addMsg(inp.value.trim(),'you');
+  socket.emit('chat_message',{roomId:currentRoomId,message:inp.value.trim()});
+  inp.value='';
+}
+document.getElementById('chat-inp').addEventListener('keydown',e=>{if(e.key==='Enter')sendMsg();});
+
+function toggleMute(){
+  muted=!muted;
+  if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!muted);
+  const btn=document.getElementById('mute-btn');
+  btn.textContent=muted?'Unmute':'Mute';
+  btn.className=muted?'ctrl mute-on':'ctrl';
+  document.getElementById('vis-who').textContent=muted?'You are muted':'Stranger is speaking...';
+}
+
+function addFriend(){
+  if(!currentStranger)return;
+  const already=friends.find(f=>f.name===currentStranger.name);
+  if(already){showToast('Already friends!');return;}
+  friends.push({...currentStranger,addedAt:new Date().toLocaleDateString()});
+  try{localStorage.setItem('talky_friends',JSON.stringify(friends));}catch(e){}
+  showToast('Friend added!');
+}
+
+function renderFriends(){
+  const list=document.getElementById('friends-list');list.innerHTML='';
+  if(!friends.length){list.innerHTML='<div class="empty-friends"><span>👥</span>No friends yet.<br>Add someone during a call!</div>';return;}
+  friends.forEach((f,i)=>{const d=document.createElement('div');d.className='friend-card';d.innerHTML=`<div class="friend-left"><div class="friend-av">${f.initial||'?'}</div><div><div class="friend-name">${f.name}</div><div class="friend-meta">${FLAGS[f.country]||'🌍'} ${f.country} · Added ${f.addedAt}</div></div></div><div style="font-size:12px;color:var(--muted)">Can reconnect live</div>`;list.appendChild(d);});
+}
+
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+/* ── MUSIC ENGINE ── */
+function getCtx(){if(!actx){actx=new(window.AudioContext||window.webkitAudioContext)();gainNode=actx.createGain();gainNode.gain.value=0.6;gainNode.connect(actx.destination);}return actx;}
+function makeNote(freq,start,dur,vol){const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(gainNode);o.type='sine';o.frequency.value=freq;g.gain.setValueAtTime(0,ctx.currentTime+start);g.gain.linearRampToValueAtTime(vol,ctx.currentTime+start+0.05);g.gain.linearRampToValueAtTime(vol*0.6,ctx.currentTime+start+dur*0.4);g.gain.linearRampToValueAtTime(0,ctx.currentTime+start+dur);o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.1);musicNodes.push(o,g);}
+function makePad(freq,start,dur){const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(gainNode);o.type='triangle';o.frequency.value=freq;g.gain.setValueAtTime(0,ctx.currentTime+start);g.gain.linearRampToValueAtTime(0.08,ctx.currentTime+start+1);g.gain.linearRampToValueAtTime(0.06,ctx.currentTime+start+dur-1);g.gain.linearRampToValueAtTime(0,ctx.currentTime+start+dur);o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.1);musicNodes.push(o,g);}
+function playLoop(){if(!isPlaying)return;const t=TRACKS[currentTrack];const scale=SCALES[t.key];const beat=60/t.bpm;const loopLen=beat*16;[0,4,8,12].forEach(b=>{makeNote(scale[0]/2,b*beat,beat*1.8,0.18);});[0,2,4,3,5,4,2,1,0,2,4,5,4,2,1,0].forEach((idx,i)=>{makeNote(scale[idx%scale.length],i*beat,beat*0.7,0.12);});[0,4,8,12].forEach(b=>{makePad(scale[2],b*beat,beat*4);makePad(scale[4],b*beat,beat*4);});setTimeout(()=>{if(isPlaying)playLoop();},loopLen*1000-200);}
+function startMusic(){if(isPlaying)return;getCtx();if(actx.state==='suspended')actx.resume();isPlaying=true;document.getElementById('mp-disc').classList.add('spinning');document.getElementById('mp-play-btn').textContent='⏸';playLoop();startMpTimer();}
+function stopMusic(){isPlaying=false;musicNodes.forEach(n=>{try{n.stop&&n.stop();n.disconnect&&n.disconnect();}catch(e){}});musicNodes=[];const d=document.getElementById('mp-disc');if(d)d.classList.remove('spinning');const b=document.getElementById('mp-play-btn');if(b)b.textContent='▶';clearInterval(mpTick);}
+function togglePlay(){if(isPlaying)stopMusic();else startMusic();}
+function setVol(v){if(gainNode)gainNode.gain.value=v/100;}
+function prevTrack(){stopMusic();currentTrack=(currentTrack-1+TRACKS.length)%TRACKS.length;mpSec=0;updateTrackUI();startMusic();}
+function nextTrack(){stopMusic();currentTrack=(currentTrack+1)%TRACKS.length;mpSec=0;updateTrackUI();startMusic();}
+function updateTrackUI(){const t=TRACKS[currentTrack];['mp-title','mp-artist','mp-disc'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=[t.title,t.artist,t.emoji][i];});const fi=document.getElementById('mp-fill');const cu=document.getElementById('mp-cur');if(fi)fi.style.width='0%';if(cu)cu.textContent='0:00';}
+function startMpTimer(){clearInterval(mpTick);mpTick=setInterval(()=>{if(!isPlaying)return;mpSec=(mpSec+1)%mpDur;const fi=document.getElementById('mp-fill');const cu=document.getElementById('mp-cur');if(fi)fi.style.width=((mpSec/mpDur)*100)+'%';if(cu)cu.textContent=fmtTime(mpSec);},1000);}
+function seekTrack(e){const pct=e.offsetX/e.currentTarget.offsetWidth;mpSec=Math.floor(pct*mpDur);const fi=document.getElementById('mp-fill');const cu=document.getElementById('mp-cur');if(fi)fi.style.width=(pct*100)+'%';if(cu)cu.textContent=fmtTime(mpSec);}
+function fmtTime(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+
+// Init
+setRegion(document.querySelector('.rtab.on'),'any');
+updateTrackUI();
+</script>
+</body>
+</html>
