@@ -413,23 +413,29 @@ function setupAnalyser(stream) {
   } catch(e) { console.warn('Analyser error:', e); }
 }
 
+// Queue candidates that arrive before remote description is set
+let pendingCandidates = [];
+
 function createPeerConnection(roomId) {
   peerConnection = new RTCPeerConnection(RTC_CONFIG);
+  pendingCandidates = [];
 
-  // Add local tracks
+  // Add local tracks immediately so the offer includes audio from the start
   if (localStream) {
     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
   }
 
-  // Remote audio
+  // Remote audio — stop waiting music the moment audio arrives
   peerConnection.ontrack = (e) => {
     const remoteAudio = document.getElementById('remote-audio');
     remoteAudio.srcObject = e.streams[0];
+    stopMusic();                          // FIX: stop music here, not before
     document.getElementById('vis-who').textContent = 'Stranger is speaking...';
     setupAnalyser(e.streams[0]);
   };
 
-  // ICE candidates
+  // Trickle ICE — send each candidate as soon as it is found
+  // instead of waiting for gathering to complete (much faster connection)
   peerConnection.onicecandidate = (e) => {
     if (e.candidate) {
       socket.emit('signal', { roomId, data: { type: 'candidate', candidate: e.candidate } });
@@ -440,6 +446,7 @@ function createPeerConnection(roomId) {
     const state = peerConnection.connectionState;
     const el = document.getElementById('conn-status');
     if (state === 'connected') {
+      stopMusic();                        // FIX: guarantee music stops on connect
       el.textContent = 'Live'; el.className = 'conn-status connected';
       startTimer();
     } else if (state === 'connecting') {
@@ -455,10 +462,11 @@ function createPeerConnection(roomId) {
 
 async function startAsInitiator(roomId) {
   currentRoomId = roomId;
-  createPeerConnection(roomId);
+  // Create offer and set local description immediately (don't wait for ICE gathering)
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
-  socket.emit('signal', { roomId, data: { type: 'offer', sdp: offer } });
+  // Send offer right away — trickle ICE candidates will follow separately
+  socket.emit('signal', { roomId, data: { type: 'offer', sdp: peerConnection.localDescription } });
 }
 
 async function handleSignal({ from, data }) {
@@ -467,11 +475,27 @@ async function handleSignal({ from, data }) {
     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
-    socket.emit('signal', { roomId: currentRoomId, data: { type: 'answer', sdp: answer } });
+    // Send answer immediately with trickle ICE
+    socket.emit('signal', { roomId: currentRoomId, data: { type: 'answer', sdp: peerConnection.localDescription } });
+    // Flush any candidates that arrived before remote desc was set
+    for (const c of pendingCandidates) {
+      try { await peerConnection.addIceCandidate(new RTCIceCandidate(c)); } catch(e) {}
+    }
+    pendingCandidates = [];
   } else if (data.type === 'answer') {
     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    // Flush queued candidates
+    for (const c of pendingCandidates) {
+      try { await peerConnection.addIceCandidate(new RTCIceCandidate(c)); } catch(e) {}
+    }
+    pendingCandidates = [];
   } else if (data.type === 'candidate') {
-    try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e) {}
+    if (peerConnection.remoteDescription) {
+      try { await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e) {}
+    } else {
+      // Queue candidate until remote description is ready
+      pendingCandidates.push(data.candidate);
+    }
   }
 }
 
@@ -481,7 +505,7 @@ socket.on('waiting', () => {
 });
 
 socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInterests }) => {
-  stopMusic();
+  // Do NOT stop music here — stop it only when audio actually arrives (ontrack / onconnectionstatechange)
   currentRoomId = roomId;
   currentStranger = {
     name: 'Stranger #' + peerId.slice(-4).toUpperCase(),
@@ -507,9 +531,9 @@ socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInte
   buildBars(); startVisBars();
   show('s-call');
 
-  await getMic();
-  createPeerConnection(roomId);
-  if (isInitiator) await startAsInitiator(roomId);
+  await getMic();                              // ensure mic is ready
+  createPeerConnection(roomId);               // add tracks immediately
+  if (isInitiator) await startAsInitiator(roomId);  // send offer with audio
 });
 
 socket.on('signal', handleSignal);
