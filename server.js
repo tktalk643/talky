@@ -9,6 +9,68 @@ const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
+// ── METERED TURN CONFIG ──────────────────────────────────────────────────────
+// Sign up free at https://www.metered.ca/stun-turn
+// Add your credentials to a .env file (never commit it):
+//   METERED_API_KEY=your_api_key_here
+//   METERED_APP_NAME=your-app-name   (the subdomain, e.g. "talky" → talky.metered.live)
+//
+// Free tier: 500 GB/month relay bandwidth — plenty for a side project.
+// ─────────────────────────────────────────────────────────────────────────────
+require('dotenv').config();
+
+const METERED_API_KEY  = process.env.METERED_API_KEY  || '';
+const METERED_APP_NAME = process.env.METERED_APP_NAME || '';
+
+// Cache TURN credentials for 1 hour (they expire every 24h from Metered)
+let turnCredentialsCache = null;
+let turnCacheExpiry = 0;
+
+async function fetchTurnCredentials() {
+  if (!METERED_API_KEY || !METERED_APP_NAME) {
+    // No credentials configured — return only STUN so the app still works
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+  }
+
+  // Return cached credentials if still valid
+  if (turnCredentialsCache && Date.now() < turnCacheExpiry) {
+    return turnCredentialsCache;
+  }
+
+  try {
+    const url = `https://${METERED_APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error(`Metered API returned ${res.status}`);
+    const iceServers = await res.json();
+    // Always prepend Google STUN as a fast fallback
+    turnCredentialsCache = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      ...iceServers
+    ];
+    turnCacheExpiry = Date.now() + 60 * 60 * 1000; // cache 1 hour
+    console.log(`[TURN] Fetched ${iceServers.length} ICE servers from Metered`);
+    return turnCredentialsCache;
+  } catch (err) {
+    console.error('[TURN] Failed to fetch Metered credentials:', err.message);
+    // Graceful fallback to STUN only
+    return [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+  }
+}
+
+// Endpoint the frontend calls to get ICE server config
+// Credentials are served from the server so the API key is never exposed
+app.get('/api/turn', async (req, res) => {
+  const iceServers = await fetchTurnCredentials();
+  res.json({ iceServers });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // Serve the frontend
 app.use(express.static(path.join(__dirname, 'public')));
 

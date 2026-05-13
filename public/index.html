@@ -370,12 +370,26 @@ let currentRoomId = null;
 let currentStranger = null;
 let analyserNode = null, audioCtxRTC = null;
 
-const RTC_CONFIG = {
+// ICE config is fetched from the server so the Metered API key is never exposed
+let RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' }
   ]
 };
+
+async function loadIceConfig() {
+  try {
+    const res = await fetch('/api/turn');
+    const { iceServers } = await res.json();
+    RTC_CONFIG = { iceServers };
+    console.log('[ICE] Config loaded:', iceServers.length, 'servers');
+  } catch (e) {
+    console.warn('[ICE] Could not fetch TURN config, using STUN only:', e.message);
+  }
+}
+// Pre-fetch on page load so it is ready before the first call
+loadIceConfig();
 
 async function getMic() {
   try {
