@@ -531,9 +531,12 @@ socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInte
   buildBars(); startVisBars();
   show('s-call');
 
-  await getMic();                              // ensure mic is ready
-  createPeerConnection(roomId);               // add tracks immediately
-  if (isInitiator) await startAsInitiator(roomId);  // send offer with audio
+  // Mic failure must not abort the call — user can still text chat
+  try { await getMic(); } catch(e) { console.warn('[Mic]', e); }
+  createPeerConnection(roomId);
+  if (isInitiator) {
+    try { await startAsInitiator(roomId); } catch(e) { console.error('[RTC] Initiator error:', e); }
+  }
 });
 
 socket.on('signal', handleSignal);
@@ -582,18 +585,33 @@ function setRegion(el,region){
 }
 
 function goFinding(){
-  // Reset find screen text in case we are returning from a call
+  // Reset find screen text
   const findP = document.querySelector('#s-find .find-card p');
-  if(findP) findP.textContent = 'Searching across worldwide...';
-  const tags=[...document.querySelectorAll('#interest-tags .tag.on')].map(t=>t.textContent);
-  const country=document.getElementById('country-select').value;
-  document.getElementById('find-region-label').textContent=country||(currentRegion==='any'?'worldwide':currentRegion);
-  const ff=document.getElementById('find-filters');ff.innerHTML='';
-  tags.forEach(t=>{const d=document.createElement('div');d.className='ff';d.textContent=t;ff.appendChild(d);});
-  if(country){const d=document.createElement('div');d.className='ff';d.textContent=(FLAGS[country]||'🌍')+' '+country;ff.appendChild(d);}
+  if(findP) findP.textContent = 'Searching...';
+
+  // Read interests and country
+  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
+  const csel = document.getElementById('country-select');
+  const country = csel ? csel.value : '';
+
+  // Update UI labels
+  const regionLabel = document.getElementById('find-region-label');
+  if(regionLabel) regionLabel.textContent = country || (currentRegion === 'any' ? 'worldwide' : currentRegion);
+  const ff = document.getElementById('find-filters');
+  if(ff){
+    ff.innerHTML = '';
+    tags.forEach(t => { const d = document.createElement('div'); d.className='ff'; d.textContent=t; ff.appendChild(d); });
+    if(country){ const d = document.createElement('div'); d.className='ff'; d.textContent=(FLAGS[country]||'🌍')+' '+country; ff.appendChild(d); }
+  }
+
+  // Navigate to finding screen
   show('s-find');
-  setTimeout(()=>startMusic(),100);
+
+  // Emit FIRST — never let music startup block matching
   socket.emit('find_match', { interests: tags, country });
+
+  // Start music after — wrapped in try/catch inside startMusic so errors don't matter
+  setTimeout(() => startMusic(), 100);
 }
 
 function cancelFind(){
@@ -698,7 +716,18 @@ function getCtx(){if(!actx){actx=new(window.AudioContext||window.webkitAudioCont
 function makeNote(freq,start,dur,vol){const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(gainNode);o.type='sine';o.frequency.value=freq;g.gain.setValueAtTime(0,ctx.currentTime+start);g.gain.linearRampToValueAtTime(vol,ctx.currentTime+start+0.05);g.gain.linearRampToValueAtTime(vol*0.6,ctx.currentTime+start+dur*0.4);g.gain.linearRampToValueAtTime(0,ctx.currentTime+start+dur);o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.1);musicNodes.push(o,g);}
 function makePad(freq,start,dur){const ctx=getCtx();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(gainNode);o.type='triangle';o.frequency.value=freq;g.gain.setValueAtTime(0,ctx.currentTime+start);g.gain.linearRampToValueAtTime(0.08,ctx.currentTime+start+1);g.gain.linearRampToValueAtTime(0.06,ctx.currentTime+start+dur-1);g.gain.linearRampToValueAtTime(0,ctx.currentTime+start+dur);o.start(ctx.currentTime+start);o.stop(ctx.currentTime+start+dur+0.1);musicNodes.push(o,g);}
 function playLoop(){if(!isPlaying)return;const t=TRACKS[currentTrack];const scale=SCALES[t.key];const beat=60/t.bpm;const loopLen=beat*16;[0,4,8,12].forEach(b=>{makeNote(scale[0]/2,b*beat,beat*1.8,0.18);});[0,2,4,3,5,4,2,1,0,2,4,5,4,2,1,0].forEach((idx,i)=>{makeNote(scale[idx%scale.length],i*beat,beat*0.7,0.12);});[0,4,8,12].forEach(b=>{makePad(scale[2],b*beat,beat*4);makePad(scale[4],b*beat,beat*4);});setTimeout(()=>{if(isPlaying)playLoop();},loopLen*1000-200);}
-function startMusic(){if(isPlaying)return;getCtx();if(actx.state==='suspended')actx.resume();isPlaying=true;document.getElementById('mp-disc').classList.add('spinning');document.getElementById('mp-play-btn').textContent='⏸';playLoop();startMpTimer();}
+function startMusic(){
+  if(isPlaying)return;
+  try{
+    getCtx();
+    if(actx.state==='suspended')actx.resume();
+    isPlaying=true;
+    document.getElementById('mp-disc').classList.add('spinning');
+    document.getElementById('mp-play-btn').textContent='⏸';
+    playLoop();
+    startMpTimer();
+  }catch(e){ console.warn('[Music] Could not start audio:', e); }
+}
 function stopMusic(){isPlaying=false;musicNodes.forEach(n=>{try{n.stop&&n.stop();n.disconnect&&n.disconnect();}catch(e){}});musicNodes=[];const d=document.getElementById('mp-disc');if(d)d.classList.remove('spinning');const b=document.getElementById('mp-play-btn');if(b)b.textContent='▶';clearInterval(mpTick);}
 function togglePlay(){if(isPlaying)stopMusic();else startMusic();}
 function setVol(v){if(gainNode)gainNode.gain.value=v/100;}
