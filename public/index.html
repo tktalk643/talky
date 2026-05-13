@@ -515,11 +515,18 @@ socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInte
 socket.on('signal', handleSignal);
 
 socket.on('peer_left', () => {
+  // Ignore if we already navigated away (e.g. user hit skip/end first)
+  if (!currentRoomId) return;
+  currentRoomId = null;
+  currentStranger = null;
+  cleanupWebRTC(false);
+  stopMusic();
   addSysMsg('Stranger left the chat.');
-  document.getElementById('conn-status').textContent = 'Ended';
-  document.getElementById('conn-status').className = 'conn-status connecting';
-  clearCall();
   showToast('Stranger left — find a new match!');
+  // Show a brief message then return to setup so user can choose next action
+  setTimeout(() => {
+    show('s-setup');
+  }, 1800);
 });
 
 socket.on('chat_message', ({ message }) => {
@@ -551,6 +558,9 @@ function setRegion(el,region){
 }
 
 function goFinding(){
+  // Reset find screen text in case we are returning from a call
+  const findP = document.querySelector('#s-find .find-card p');
+  if(findP) findP.textContent = 'Searching across worldwide...';
   const tags=[...document.querySelectorAll('#interest-tags .tag.on')].map(t=>t.textContent);
   const country=document.getElementById('country-select').value;
   document.getElementById('find-region-label').textContent=country||(currentRegion==='any'?'worldwide':currentRegion);
@@ -569,25 +579,30 @@ function cancelFind(){
 }
 
 function skipCall(){
-  cleanupWebRTC();
-  socket.emit('skip', { roomId: currentRoomId });
+  const roomId = currentRoomId;
   currentRoomId = null;
+  currentStranger = null;
+  cleanupWebRTC(false);
+  socket.emit('skip', { roomId });
   stopMusic();
-  goFinding();
+  setTimeout(() => goFinding(), 150);
 }
 
 function endCall(){
-  cleanupWebRTC();
-  socket.emit('skip', { roomId: currentRoomId });
+  const roomId = currentRoomId;
   currentRoomId = null;
+  currentStranger = null;
+  cleanupWebRTC(true);
+  socket.emit('skip', { roomId });
   stopMusic();
-  show('s-setup');
+  setTimeout(() => show('s-setup'), 150);
 }
 
-function cleanupWebRTC(){
+function cleanupWebRTC(releaseMic){
+  releaseMic = releaseMic !== false;
   clearCall();
   if(peerConnection){ try{ peerConnection.close(); }catch(e){} peerConnection=null; }
-  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  if(releaseMic && localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
   if(audioCtxRTC){ try{ audioCtxRTC.close(); }catch(e){} audioCtxRTC=null; analyserNode=null; }
   document.getElementById('remote-audio').srcObject = null;
 }
