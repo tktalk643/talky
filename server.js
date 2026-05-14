@@ -173,4 +173,29 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`\n🎙  Talky signaling server running on http://localhost:${PORT}\n`);
+
+  // ── KEEP-ALIVE PING ────────────────────────────────────────────────────────
+  // Render's free tier spins down after 15 min of inactivity.
+  // Pinging ourselves every 14 min keeps the server awake 24/7 at no cost.
+  // Set RENDER_EXTERNAL_URL in Render's environment variables to your live URL
+  // e.g. https://talky-yhs1.onrender.com
+  const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+  if (SELF_URL) {
+    const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes
+    setInterval(async () => {
+      try {
+        const res = await fetch(`${SELF_URL}/ping`);
+        console.log(`[ping] kept alive — status ${res.status}`);
+      } catch (e) {
+        console.warn('[ping] self-ping failed:', e.message);
+      }
+    }, PING_INTERVAL);
+    console.log(`[ping] keep-alive enabled → ${SELF_URL}/ping every 14 min`);
+  } else {
+    console.log('[ping] RENDER_EXTERNAL_URL not set — keep-alive disabled (OK for local dev)');
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 });
+
+// Ping endpoint — just responds 200 OK so the keep-alive fetch succeeds
+app.get('/ping', (req, res) => res.status(200).send('ok'));
