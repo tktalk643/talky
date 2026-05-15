@@ -186,6 +186,16 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('chat_message', { message });
   });
 
+  // Friend request — relay to the other person in the room
+  socket.on('friend_request', ({ roomId }) => {
+    if (roomId) socket.to(roomId).emit('friend_request');
+  });
+
+  // Friend response — relay acceptance/denial back to requester
+  socket.on('friend_response', ({ roomId, accepted }) => {
+    if (roomId) socket.to(roomId).emit('friend_response', { accepted });
+  });
+
   // Handle disconnect
   socket.on('disconnect', () => {
     console.log(`[-] Disconnected: ${socket.id}`);

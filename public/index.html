@@ -186,6 +186,18 @@ body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--t
 /* TOAST */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);color:#061208;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;font-family:'Cabinet Grotesk',sans-serif;white-space:nowrap}
 .toast.show{opacity:1}
+/* FRIEND REQUEST MODAL */
+.fr-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:none;align-items:center;justify-content:center;padding:20px}
+.fr-overlay.show{display:flex}
+.fr-modal{background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);padding:28px 24px;max-width:320px;width:100%;text-align:center}
+.fr-avatar{width:56px;height:56px;border-radius:50%;background:rgba(31,204,132,.15);border:2px solid rgba(31,204,132,.3);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:var(--accent);font-family:'Clash Display',sans-serif;margin:0 auto 14px}
+.fr-title{font-family:'Clash Display',sans-serif;font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px}
+.fr-sub{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5}
+.fr-btns{display:flex;gap:10px}
+.fr-accept{flex:1;padding:12px;border-radius:var(--r);background:var(--accent);color:#061208;font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;transition:background .15s}
+.fr-accept:hover{background:#25e892}
+.fr-deny{flex:1;padding:12px;border-radius:var(--r);background:transparent;color:var(--muted);font-family:'Cabinet Grotesk',sans-serif;font-size:14px;font-weight:500;border:1px solid var(--border2);cursor:pointer;transition:all .15s}
+.fr-deny:hover{border-color:var(--danger);color:var(--danger)}
 
 /* SOCKET STATUS BANNER */
 .socket-banner{position:fixed;top:0;left:0;right:0;background:rgba(224,82,82,.9);color:#fff;text-align:center;font-size:13px;padding:8px;z-index:9999;display:none}
@@ -199,6 +211,18 @@ body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--t
 </head>
 <body>
 <audio id="remote-audio" autoplay playsinline></audio>
+<!-- FRIEND REQUEST MODAL -->
+<div class="fr-overlay" id="fr-overlay">
+  <div class="fr-modal">
+    <div class="fr-avatar" id="fr-avatar">?</div>
+    <div class="fr-title" id="fr-title">Friend Request</div>
+    <div class="fr-sub" id="fr-sub">wants to add you as a friend</div>
+    <div class="fr-btns">
+      <button class="fr-accept" onclick="respondFriendReq(true)">Accept ✓</button>
+      <button class="fr-deny"   onclick="respondFriendReq(false)">Deny ✕</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="toast"></div>
 <div id="socket-banner" class="socket-banner">⚠️ Reconnecting to server...</div>
@@ -384,13 +408,20 @@ const COUNTRIES = {
 };
 const FLAGS = {Germany:'🇩🇪',France:'🇫🇷','United Kingdom':'🇬🇧',Spain:'🇪🇸',Italy:'🇮🇹',Netherlands:'🇳🇱',Sweden:'🇸🇪',Poland:'🇵🇱',Portugal:'🇵🇹',Norway:'🇳🇴',Denmark:'🇩🇰',Finland:'🇫🇮',Belgium:'🇧🇪',Switzerland:'🇨🇭',Austria:'🇦🇹','United States':'🇺🇸',Canada:'🇨🇦',Brazil:'🇧🇷',Mexico:'🇲🇽',Argentina:'🇦🇷',Colombia:'🇨🇴',Chile:'🇨🇱',Peru:'🇵🇪',Venezuela:'🇻🇪',Ecuador:'🇪🇨',Japan:'🇯🇵','South Korea':'🇰🇷',India:'🇮🇳',China:'🇨🇳',Indonesia:'🇮🇩',Philippines:'🇵🇭',Thailand:'🇹🇭',Vietnam:'🇻🇳',Malaysia:'🇲🇾',Singapore:'🇸🇬',Pakistan:'🇵🇰',Bangladesh:'🇧🇩',Australia:'🇦🇺','New Zealand':'🇳🇿','South Africa':'🇿🇦',Nigeria:'🇳🇬',Kenya:'🇰🇪',Egypt:'🇪🇬',Turkey:'🇹🇷',UAE:'🇦🇪','Saudi Arabia':'🇸🇦',Israel:'🇮🇱',Morocco:'🇲🇦'};
 const TRACKS = [
-  {title:'Midnight Lounge',emoji:'🌙',bpm:72,key:'Am'},
-  {title:'Still Water',emoji:'🌊',bpm:60,key:'Dm'},
-  {title:'Gentle Drift',emoji:'🍃',bpm:80,key:'Gm'},
-  {title:'City Rain',emoji:'🌧',bpm:68,key:'Em'},
-  {title:'Soft Current',emoji:'✨',bpm:75,key:'Cm'}
+  {title:'Morning Mist',    emoji:'🌅', bpm:44, key:'CMaj'},
+  {title:'Still Pond',      emoji:'🌿', bpm:40, key:'GMaj'},
+  {title:'Soft Horizon',    emoji:'☁️',  bpm:48, key:'FMaj'},
+  {title:'Breathing Space', emoji:'🕊',  bpm:42, key:'DMaj'},
+  {title:'Quiet Shore',     emoji:'🌊', bpm:46, key:'AMaj'}
 ];
-const SCALES = {Am:[220,261.6,293.7,329.6,349.2,392,440,523.3],Dm:[146.8,174.6,196,220,233.1,261.6,293.7,349.2],Gm:[196,220,233.1,261.6,293.7,311.1,349.2,392],Em:[164.8,196,220,246.9,261.6,293.7,329.6,392],Cm:[130.8,155.6,174.6,196,207.7,233.1,261.6,311.1]};
+// Pentatonic major scales — inherently calm, no tension
+const SCALES = {
+  CMaj: [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3],
+  GMaj: [196.0, 220.0, 246.9, 293.7, 329.6, 392.0, 440.0, 493.9],
+  FMaj: [174.6, 196.0, 220.0, 261.6, 293.7, 349.2, 392.0, 440.0],
+  DMaj: [146.8, 164.8, 185.0, 220.0, 246.9, 293.7, 329.6, 370.0],
+  AMaj: [110.0, 123.5, 138.6, 164.8, 185.0, 220.0, 246.9, 277.2]
+};
 
 /* ══════════════════════════════════════════════
    STATE
@@ -476,6 +507,9 @@ socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInte
   document.getElementById('vis-who').textContent = 'Waiting for audio...';
   // Reset all call controls
   muted = false; onHold = false; speakerOn = true;
+  const addFriendBtn = document.querySelector('.ctrl.add-friend');
+  if (addFriendBtn) { addFriendBtn.textContent = '+ Friend'; addFriendBtn.disabled = false; addFriendBtn.style.opacity = ''; }
+  document.getElementById('fr-overlay').classList.remove('show');
   const muteBtn = document.getElementById('mute-btn');
   muteBtn.classList.remove('danger-on');
   muteBtn.querySelector('.ph-icon').textContent = '🎤';
@@ -552,6 +586,31 @@ socket.on('peer_left', () => {
 });
 
 socket.on('chat_message', ({ message }) => addMsg(message, 'them'));
+
+  socket.on('friend_request', () => {
+    // Show accept/deny modal to this user
+    if (!currentStranger) return;
+    document.getElementById('fr-avatar').textContent = currentStranger.initial || '?';
+    document.getElementById('fr-title').textContent = 'Friend Request';
+    document.getElementById('fr-sub').textContent = currentStranger.name + ' wants to add you as a friend';
+    document.getElementById('fr-overlay').classList.add('show');
+  });
+
+  socket.on('friend_response', ({ accepted }) => {
+    if (accepted) {
+      showToast('They accepted your friend request! 🎉');
+      // Save friend on the requesting side
+      if (currentStranger && !friends.find(f => f.name === currentStranger.name)) {
+        friends.push({ ...currentStranger, addedAt: new Date().toLocaleDateString() });
+        try { localStorage.setItem('talky_friends', JSON.stringify(friends)); } catch(e) {}
+      }
+    } else {
+      showToast('Friend request was declined.');
+      // Re-enable the + Friend button
+      const btn = document.querySelector('.ctrl.add-friend');
+      if (btn) { btn.textContent = '+ Friend'; btn.disabled = false; btn.style.opacity = ''; }
+    }
+  });
 } // end initSocket
 
 /* ══════════════════════════════════════════════
@@ -737,11 +796,29 @@ function toggleSpeaker() {
 }
 
 function addFriend() {
-  if (!currentStranger) return;
+  if (!currentStranger || !currentRoomId) return;
   if (friends.find(f => f.name === currentStranger.name)) { showToast('Already friends!'); return; }
-  friends.push({ ...currentStranger, addedAt: new Date().toLocaleDateString() });
-  try { localStorage.setItem('talky_friends', JSON.stringify(friends)); } catch(e) {}
-  showToast('Friend added!');
+  // Send friend request to the other user via server
+  socket.emit('friend_request', { roomId: currentRoomId });
+  showToast('Friend request sent!');
+  // Disable button to prevent spamming
+  const btn = document.querySelector('.ctrl.add-friend');
+  if (btn) { btn.textContent = 'Request sent'; btn.disabled = true; btn.style.opacity = '0.5'; }
+}
+
+function respondFriendReq(accepted) {
+  document.getElementById('fr-overlay').classList.remove('show');
+  socket.emit('friend_response', { roomId: currentRoomId, accepted });
+  if (accepted) {
+    showToast('Friend accepted!');
+    // Save on accepting side too
+    if (currentStranger && !friends.find(f => f.name === currentStranger.name)) {
+      friends.push({ ...currentStranger, addedAt: new Date().toLocaleDateString() });
+      try { localStorage.setItem('talky_friends', JSON.stringify(friends)); } catch(e) {}
+    }
+  } else {
+    showToast('Friend request declined.');
+  }
 }
 
 /* ══════════════════════════════════════════════
@@ -895,32 +972,60 @@ function getAudioCtx() {
 function makeNote(freq, start, dur, vol) {
   const ctx = getAudioCtx();
   const o = ctx.createOscillator(), g = ctx.createGain();
-  o.connect(g); g.connect(gainNode); o.type = 'sine'; o.frequency.value = freq;
+  o.connect(g); g.connect(gainNode);
+  o.type = 'sine'; o.frequency.value = freq;
+  // Slow attack (0.3s) and long release for a soft, breathy feel
   g.gain.setValueAtTime(0, ctx.currentTime + start);
-  g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.05);
-  g.gain.linearRampToValueAtTime(vol * 0.6, ctx.currentTime + start + dur * 0.4);
+  g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.3);
+  g.gain.linearRampToValueAtTime(vol * 0.7, ctx.currentTime + start + dur * 0.6);
   g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
-  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.1);
+  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.2);
   musicNodes.push(o, g);
 }
 function makePad(freq, start, dur) {
   const ctx = getAudioCtx();
   const o = ctx.createOscillator(), g = ctx.createGain();
-  o.connect(g); g.connect(gainNode); o.type = 'triangle'; o.frequency.value = freq;
+  o.connect(g); g.connect(gainNode);
+  o.type = 'sine'; // sine instead of triangle — much softer
+  o.frequency.value = freq;
+  // Very slow fade in/out for a gentle wash of sound
   g.gain.setValueAtTime(0, ctx.currentTime + start);
-  g.gain.linearRampToValueAtTime(0.08, ctx.currentTime + start + 1);
-  g.gain.linearRampToValueAtTime(0.06, ctx.currentTime + start + dur - 1);
+  g.gain.linearRampToValueAtTime(0.05, ctx.currentTime + start + 1.5);
+  g.gain.linearRampToValueAtTime(0.04, ctx.currentTime + start + dur - 1.5);
   g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
-  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.1);
+  o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur + 0.2);
   musicNodes.push(o, g);
 }
 function playLoop() {
   if (!isPlaying) return;
-  const tr = TRACKS[currentTrack], scale = SCALES[tr.key], beat = 60 / tr.bpm, len = beat * 16;
-  [0,4,8,12].forEach(b => makeNote(scale[0] / 2, b * beat, beat * 1.8, 0.18));
-  [0,2,4,3,5,4,2,1,0,2,4,5,4,2,1,0].forEach((idx, i) => makeNote(scale[idx % scale.length], i * beat, beat * 0.7, 0.12));
-  [0,4,8,12].forEach(b => { makePad(scale[2], b * beat, beat * 4); makePad(scale[4], b * beat, beat * 4); });
-  setTimeout(() => { if (isPlaying) playLoop(); }, len * 1000 - 200);
+  const tr = TRACKS[currentTrack], scale = SCALES[tr.key];
+  const beat = 60 / tr.bpm;
+  const len  = beat * 16;  // one phrase = 16 beats
+
+  // Deep bass drone — very quiet, held for full phrase
+  makeNote(scale[0] / 2, 0,      len * 0.95, 0.06);
+
+  // Slow pad chords — one chord every 4 beats, very soft
+  [0, 4, 8, 12].forEach(b => {
+    makePad(scale[0], b * beat, beat * 4.2);   // root
+    makePad(scale[2], b * beat, beat * 4.2);   // third
+    makePad(scale[4], b * beat, beat * 4.2);   // fifth
+  });
+
+  // Sparse melody — only 6 notes per phrase, long gaps between them
+  // Uses only the top 5 notes of the scale for an airy, floating feel
+  const melodyBeats = [0, 2.5, 5, 8, 11, 13.5];
+  const melodyNotes = [4, 5, 6, 5, 4, 3];
+  melodyBeats.forEach((b, i) => {
+    makeNote(scale[melodyNotes[i]], b * beat, beat * 1.6, 0.09);
+  });
+
+  // Gentle high shimmer — very quiet, creates spaciousness
+  [1, 5, 9, 13].forEach(b => {
+    makeNote(scale[6] * 2, b * beat, beat * 0.4, 0.04);
+  });
+
+  setTimeout(() => { if (isPlaying) playLoop(); }, len * 1000 - 150);
 }
 function startMusic() {
   if (isPlaying) return;
