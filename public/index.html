@@ -537,10 +537,12 @@ socket.on('peer_left', () => {
   console.log('[peer_left]');
   currentRoomId = null;
   currentStranger = null;
-  doCleanup(false);
-  addSysMsg('Stranger left the chat.');
-  showToast('Stranger left — find a new match!');
-  setTimeout(() => show('s-setup'), 1800);
+  doCleanup(false);  // keep mic ready for next call
+  stopMusic();
+  showToast('Stranger left — finding next match...');
+  addSysMsg('Stranger left. Finding someone new...');
+  // Re-queue automatically after a short pause
+  setTimeout(() => goFinding(), 2000);
 });
 
 socket.on('chat_message', ({ message }) => addMsg(message, 'them'));
@@ -651,10 +653,10 @@ function endCall() {
   const roomId = currentRoomId;
   currentRoomId = null;
   currentStranger = null;
-  doCleanup(true);            // release mic fully
+  doCleanup(false);           // keep mic ready for next call
   stopMusic();
   socket.emit('skip', { roomId });
-  setTimeout(() => show('s-setup'), 150);
+  setTimeout(() => goFinding(), 150);
 }
 
 function toggleMute() {
