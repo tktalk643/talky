@@ -141,13 +141,44 @@ io.on('connection', (socket) => {
   });
 
   // Client wants to skip / end call
-  socket.on('skip', ({ roomId }) => {
+  // requeue: true  → immediately put this user back in the waiting queue
+  // requeue: false → just leave the room (user will navigate away)
+  socket.on('skip', ({ roomId, requeue, interests, country }) => {
     if (roomId) {
       socket.to(roomId).emit('peer_left');
       socket.leave(roomId);
     }
-    // Remove from queue if still waiting
+    // Always remove from queue first to avoid duplicates
     waitingQueue = waitingQueue.filter(u => u.socketId !== socket.id);
+
+    if (requeue) {
+      // Put this user straight back in the queue with their last interests/country
+      waitingQueue.push({ socketId: socket.id, socket, interests: interests || [], country: country || '' });
+      socket.emit('waiting');
+      console.log(`[requeue] ${socket.id} back in queue (size: ${waitingQueue.length})`);
+
+      // Check immediately if someone else is already waiting
+      const idx = findMatch(socket, interests || [], country || '');
+      if (idx !== -1) {
+        const matched = waitingQueue.splice(idx, 1)[0];
+        // Remove self from queue too before matching
+        waitingQueue = waitingQueue.filter(u => u.socketId !== socket.id);
+
+        const newRoomId = socket.id + '__' + matched.socketId;
+        socket.join(newRoomId);
+        matched.socket.join(newRoomId);
+
+        socket.emit('matched', {
+          roomId: newRoomId, peerId: matched.socketId, isInitiator: true,
+          peerCountry: matched.country, peerInterests: matched.interests
+        });
+        matched.socket.emit('matched', {
+          roomId: newRoomId, peerId: socket.id, isInitiator: false,
+          peerCountry: country || '', peerInterests: interests || []
+        });
+        console.log(`[requeue-match] ${socket.id} <-> ${matched.socketId}`);
+      }
+    }
   });
 
   // Relay text chat messages

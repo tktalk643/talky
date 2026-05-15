@@ -535,14 +535,20 @@ socket.on('signal', async ({ data }) => {
 socket.on('peer_left', () => {
   if (!currentRoomId) return; // already navigated away
   console.log('[peer_left]');
+  const roomId = currentRoomId;
   currentRoomId = null;
   currentStranger = null;
-  doCleanup(false);  // keep mic ready for next call
+  doCleanup(false);
   stopMusic();
   showToast('Stranger left — finding next match...');
   addSysMsg('Stranger left. Finding someone new...');
-  // Re-queue automatically after a short pause
-  setTimeout(() => goFinding(), 2000);
+  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
+  const country = (document.getElementById('country-select') || {}).value || '';
+  // Re-queue via server after short delay so user sees the message
+  setTimeout(() => {
+    socket.emit('skip', { roomId: null, requeue: true, interests: tags, country });
+    showFindScreen(tags, country);
+  }, 2000);
 });
 
 socket.on('chat_message', ({ message }) => addMsg(message, 'them'));
@@ -643,20 +649,26 @@ function skipCall() {
   const roomId = currentRoomId;
   currentRoomId = null;
   currentStranger = null;
-  doCleanup(false);           // keep mic for next call
+  doCleanup(false);
   stopMusic();
-  socket.emit('skip', { roomId });
-  setTimeout(() => goFinding(), 150);
+  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
+  const country = (document.getElementById('country-select') || {}).value || '';
+  // Tell server to skip AND immediately re-queue this user
+  socket.emit('skip', { roomId, requeue: true, interests: tags, country });
+  setTimeout(() => showFindScreen(tags, country), 150);
 }
 
 function endCall() {
   const roomId = currentRoomId;
   currentRoomId = null;
   currentStranger = null;
-  doCleanup(false);           // keep mic ready for next call
+  doCleanup(false);
   stopMusic();
-  socket.emit('skip', { roomId });
-  setTimeout(() => goFinding(), 150);
+  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
+  const country = (document.getElementById('country-select') || {}).value || '';
+  // Tell server to skip AND immediately re-queue this user
+  socket.emit('skip', { roomId, requeue: true, interests: tags, country });
+  setTimeout(() => showFindScreen(tags, country), 150);
 }
 
 function toggleMute() {
@@ -758,35 +770,30 @@ function setRegion(el, region) {
   });
 }
 
-function goFinding() {
-  console.log('goFinding called');
-  // Guard: socket must exist and be connected
-  if (!socket || !socket.connected) {
-    console.log('socket not ready: ' + (socket ? socket.connected : 'null'));
-    showToast('Not connected — please wait...');
-    return;
-  }
-  console.log('socket connected, emitting find_match');
-
-  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
-  const country = (document.getElementById('country-select') || {}).value || '';
-
-  // Update finding screen labels
+// showFindScreen — just updates UI, used when server already has us queued
+function showFindScreen(tags, country) {
   document.getElementById('find-region-label').textContent = country || (currentRegion === 'any' ? 'worldwide' : currentRegion);
   document.getElementById('find-status').textContent = '';
   const ff = document.getElementById('find-filters');
   ff.innerHTML = '';
-  tags.forEach(t => { const d = document.createElement('div'); d.className = 'ff'; d.textContent = t; ff.appendChild(d); });
+  (tags || []).forEach(t => { const d = document.createElement('div'); d.className = 'ff'; d.textContent = t; ff.appendChild(d); });
   if (country) { const d = document.createElement('div'); d.className = 'ff'; d.textContent = (FLAGS[country] || '🌍') + ' ' + country; ff.appendChild(d); }
-
   show('s-find');
+  setTimeout(() => { try { startMusic(); } catch(e) {} }, 100);
+}
 
-  // Emit to server — this is what actually does the matching
+// goFinding — emits find_match AND shows the find screen (used from setup page)
+function goFinding() {
+  console.log('goFinding called');
+  if (!socket || !socket.connected) {
+    showToast('Not connected — please wait...');
+    return;
+  }
+  const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
+  const country = (document.getElementById('country-select') || {}).value || '';
   socket.emit('find_match', { interests: tags, country });
   console.log('[goFinding] emitted find_match', { tags, country });
-
-  // Start music — in a try/catch so any error never blocks matching
-  setTimeout(() => { try { startMusic(); } catch(e) {} }, 100);
+  showFindScreen(tags, country);
 }
 
 function cancelFind() {
