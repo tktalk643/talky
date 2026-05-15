@@ -149,6 +149,24 @@ body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--t
 .ctrl.add-friend{background:rgba(31,204,132,.1);border-color:rgba(31,204,132,.3);color:var(--accent)}
 .ctrl.skip-btn{border-color:rgba(224,168,82,.3);color:var(--warn)}
 .ctrl.end-btn{background:rgba(224,82,82,.1);border-color:rgba(224,82,82,.4);color:var(--danger)}
+/* Phone-style action buttons */
+.phone-btns{display:flex;justify-content:center;gap:28px;padding:6px 0}
+.ph-btn{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:none;cursor:pointer;font-family:'Cabinet Grotesk',sans-serif;transition:transform .15s}
+.ph-btn:hover{transform:scale(1.08)}
+.ph-icon{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all .2s;border:1px solid var(--border2);background:var(--card2)}
+.ph-label{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.3px}
+.ph-btn.active .ph-icon{background:rgba(31,204,132,.15);border-color:var(--accent);color:var(--accent)}
+.ph-btn.active .ph-label{color:var(--accent)}
+.ph-btn.danger-on .ph-icon{background:rgba(224,82,82,.15);border-color:var(--danger);color:var(--danger)}
+.ph-btn.danger-on .ph-label{color:var(--danger)}
+.ph-btn.hold-on .ph-icon{background:rgba(224,168,82,.12);border-color:var(--warn);color:var(--warn)}
+.ph-btn.hold-on .ph-label{color:var(--warn)}
+/* Hold overlay on vis-area */
+.hold-overlay{display:none;position:absolute;inset:0;background:rgba(10,15,13,.75);border-radius:var(--r2);align-items:center;justify-content:center;flex-direction:column;gap:8px;z-index:10}
+.hold-overlay.show{display:flex}
+.hold-overlay span{font-size:28px}
+.hold-overlay p{font-size:14px;color:var(--warn);font-weight:600}
+.vis-area{position:relative}
 
 /* FRIENDS */
 #s-friends{padding:28px;gap:16px;align-items:center;overflow-y:auto}
@@ -312,17 +330,33 @@ body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--t
     <div class="vis-area">
       <div class="vis-bars" id="vis-bars"></div>
       <div class="vis-who" id="vis-who">Waiting for audio...</div>
+      <div class="hold-overlay" id="hold-overlay"><span>⏸</span><p>Call on Hold</p></div>
     </div>
     <div class="chat-area" id="chat-box"></div>
     <div class="inp-row">
       <input type="text" id="chat-inp" placeholder="Type a message..."/>
       <button class="send-btn" onclick="sendMsg()">Send</button>
     </div>
+    <!-- Primary phone-style controls -->
+    <div class="phone-btns">
+      <button class="ph-btn" id="mute-btn" onclick="toggleMute()">
+        <div class="ph-icon">🎤</div>
+        <div class="ph-label" id="mute-label">Mute</div>
+      </button>
+      <button class="ph-btn" id="hold-btn" onclick="toggleHold()">
+        <div class="ph-icon">⏸</div>
+        <div class="ph-label" id="hold-label">Hold</div>
+      </button>
+      <button class="ph-btn" id="speaker-btn" onclick="toggleSpeaker()">
+        <div class="ph-icon">🔊</div>
+        <div class="ph-label" id="speaker-label">Speaker</div>
+      </button>
+    </div>
+    <!-- Secondary controls -->
     <div class="ctrl-row">
-      <button class="ctrl" id="mute-btn" onclick="toggleMute()">Mute</button>
       <button class="ctrl add-friend" onclick="addFriend()">+ Friend</button>
       <button class="ctrl skip-btn" onclick="skipCall()">Skip</button>
-      <button class="ctrl end-btn" onclick="endCall()">End</button>
+      <button class="ctrl end-btn" onclick="endCall()">End Call</button>
     </div>
   </div>
 </div>
@@ -441,9 +475,24 @@ socket.on('matched', async ({ roomId, peerId, isInitiator, peerCountry, peerInte
   setBadge('connecting');
   document.getElementById('call-timer').textContent = '00:00';
   document.getElementById('vis-who').textContent = 'Waiting for audio...';
-  document.getElementById('mute-btn').textContent = 'Mute';
-  document.getElementById('mute-btn').className = 'ctrl';
-  muted = false;
+  // Reset all call controls
+  muted = false; onHold = false; speakerOn = true;
+  const muteBtn = document.getElementById('mute-btn');
+  muteBtn.classList.remove('danger-on');
+  muteBtn.querySelector('.ph-icon').textContent = '🎤';
+  document.getElementById('mute-label').textContent = 'Mute';
+  const holdBtn = document.getElementById('hold-btn');
+  holdBtn.classList.remove('hold-on');
+  holdBtn.querySelector('.ph-icon').textContent = '⏸';
+  document.getElementById('hold-label').textContent = 'Hold';
+  const spkBtn = document.getElementById('speaker-btn');
+  spkBtn.classList.remove('active');
+  spkBtn.querySelector('.ph-icon').textContent = '🔊';
+  document.getElementById('speaker-label').textContent = 'Speaker';
+  const overlay = document.getElementById('hold-overlay');
+  if (overlay) overlay.classList.remove('show');
+  const remoteAudio = document.getElementById('remote-audio');
+  if (remoteAudio) remoteAudio.volume = 1;
 
   const box = document.getElementById('chat-box');
   box.innerHTML = '';
@@ -612,9 +661,66 @@ function endCall() {
 function toggleMute() {
   muted = !muted;
   if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = !muted);
-  document.getElementById('mute-btn').textContent = muted ? 'Unmute' : 'Mute';
-  document.getElementById('mute-btn').className = muted ? 'ctrl mute-on' : 'ctrl';
-  document.getElementById('vis-who').textContent = muted ? 'You are muted' : 'Stranger is speaking...';
+  const btn = document.getElementById('mute-btn');
+  const lbl = document.getElementById('mute-label');
+  if (muted) {
+    btn.classList.add('danger-on');
+    btn.querySelector('.ph-icon').textContent = '🔇';
+    lbl.textContent = 'Unmute';
+    document.getElementById('vis-who').textContent = 'You are muted';
+  } else {
+    btn.classList.remove('danger-on');
+    btn.querySelector('.ph-icon').textContent = '🎤';
+    lbl.textContent = 'Mute';
+    document.getElementById('vis-who').textContent = 'Stranger is speaking...';
+  }
+}
+
+let onHold = false;
+function toggleHold() {
+  onHold = !onHold;
+  const btn = document.getElementById('hold-btn');
+  const lbl = document.getElementById('hold-label');
+  const overlay = document.getElementById('hold-overlay');
+  const remoteAudio = document.getElementById('remote-audio');
+  if (onHold) {
+    // Pause remote audio and disable outgoing mic
+    if (remoteAudio) remoteAudio.volume = 0;
+    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false);
+    btn.classList.add('hold-on');
+    btn.querySelector('.ph-icon').textContent = '▶️';
+    lbl.textContent = 'Resume';
+    overlay.classList.add('show');
+    addSysMsg('Call on hold.');
+  } else {
+    // Resume
+    if (remoteAudio) remoteAudio.volume = speakerOn ? 1 : 1;
+    if (localStream && !muted) localStream.getAudioTracks().forEach(t => t.enabled = true);
+    btn.classList.remove('hold-on');
+    btn.querySelector('.ph-icon').textContent = '⏸';
+    lbl.textContent = 'Hold';
+    overlay.classList.remove('show');
+    addSysMsg('Call resumed.');
+  }
+}
+
+let speakerOn = true;
+function toggleSpeaker() {
+  speakerOn = !speakerOn;
+  const btn = document.getElementById('speaker-btn');
+  const lbl = document.getElementById('speaker-label');
+  const remoteAudio = document.getElementById('remote-audio');
+  if (!speakerOn) {
+    if (remoteAudio) remoteAudio.volume = 0;
+    btn.classList.add('active');
+    btn.querySelector('.ph-icon').textContent = '🔈';
+    lbl.textContent = 'Speaker off';
+  } else {
+    if (remoteAudio) remoteAudio.volume = 1;
+    btn.classList.remove('active');
+    btn.querySelector('.ph-icon').textContent = '🔊';
+    lbl.textContent = 'Speaker';
+  }
 }
 
 function addFriend() {
