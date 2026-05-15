@@ -181,6 +181,8 @@ body{font-family:'Cabinet Grotesk',sans-serif;background:var(--bg);color:var(--t
 </head>
 <body>
 <audio id="remote-audio" autoplay playsinline></audio>
+<!-- DEBUG PANEL — remove once stable -->
+<div id="dbg-panel" style="position:fixed;bottom:0;left:0;right:0;max-height:140px;overflow-y:auto;background:rgba(0,0,0,.85);color:#1fcc84;font-size:11px;font-family:monospace;padding:8px 12px;z-index:99999;border-top:1px solid #1fcc84;display:block"></div>
 <div id="toast" class="toast"></div>
 <div id="socket-banner" class="socket-banner">⚠️ Reconnecting to server...</div>
 
@@ -383,28 +385,37 @@ let RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls
 /* ══════════════════════════════════════════════
    SOCKET — created ONCE, with auto-reconnect
 ══════════════════════════════════════════════ */
-const socket = io({ reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
+// Declare socket at top level so all functions can reference it
+let socket;
 
-socket.on('connect', () => {
-  console.log('[socket] connected:', socket.id);
-  document.getElementById('socket-banner').classList.remove('show');
-  document.getElementById('go-btn').disabled = false;
-  document.getElementById('go-btn').textContent = 'Find Someone';
-});
+function setGoBtn(disabled, text) {
+  const btn = document.getElementById('go-btn');
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.textContent = text;
+}
 
-socket.on('disconnect', () => {
-  console.warn('[socket] disconnected');
-  document.getElementById('socket-banner').classList.add('show');
-  document.getElementById('go-btn').disabled = true;
-  document.getElementById('go-btn').textContent = 'Reconnecting...';
-});
+function initSocket() {
+  socket = io({ reconnectionDelay: 1000, reconnectionDelayMax: 5000 });
 
-socket.on('reconnect', () => {
-  document.getElementById('socket-banner').classList.remove('show');
-  document.getElementById('go-btn').disabled = false;
-  document.getElementById('go-btn').textContent = 'Find Someone';
-  showToast('Reconnected!');
-});
+  socket.on('connect', () => {
+    dbg('[socket] connected: ' + socket.id);
+    document.getElementById('socket-banner').classList.remove('show');
+    setGoBtn(false, 'Find Someone');
+  });
+
+  socket.on('disconnect', () => {
+    dbg('[socket] disconnected');
+    document.getElementById('socket-banner').classList.add('show');
+    setGoBtn(true, 'Reconnecting...');
+  });
+
+  socket.on('reconnect', () => {
+    dbg('[socket] reconnected');
+    document.getElementById('socket-banner').classList.remove('show');
+    setGoBtn(false, 'Find Someone');
+    showToast('Reconnected!');
+  });
 
 socket.on('waiting', () => {
   document.getElementById('find-status').textContent = 'Waiting for someone to join...';
@@ -485,6 +496,7 @@ socket.on('peer_left', () => {
 });
 
 socket.on('chat_message', ({ message }) => addMsg(message, 'them'));
+} // end initSocket
 
 /* ══════════════════════════════════════════════
    ICE CONFIG
@@ -497,7 +509,7 @@ async function loadIceConfig() {
     console.log('[ICE] loaded', iceServers.length, 'servers');
   } catch(e) { console.warn('[ICE] using STUN only:', e.message); }
 }
-loadIceConfig();
+// loadIceConfig() called in DOMContentLoaded
 
 /* ══════════════════════════════════════════════
    WebRTC
@@ -640,11 +652,14 @@ function setRegion(el, region) {
 }
 
 function goFinding() {
-  // Guard: don't proceed if socket not connected
-  if (!socket.connected) {
+  dbg('goFinding called');
+  // Guard: socket must exist and be connected
+  if (!socket || !socket.connected) {
+    dbg('socket not ready: ' + (socket ? socket.connected : 'null'));
     showToast('Not connected — please wait...');
     return;
   }
+  dbg('socket connected, emitting find_match');
 
   const tags = [...document.querySelectorAll('#interest-tags .tag.on')].map(t => t.textContent);
   const country = (document.getElementById('country-select') || {}).value || '';
@@ -839,10 +854,31 @@ function seekTrack(e) {
 function fmtTime(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
 /* ══════════════════════════════════════════════
-   INIT
+   DEBUG LOGGER — visible on screen
 ══════════════════════════════════════════════ */
-setRegion(document.querySelector('.rtab.on'), 'any');
-updateTrackUI();
+function dbg(msg) {
+  console.log(msg);
+  const panel = document.getElementById('dbg-panel');
+  if (!panel) return;
+  const line = document.createElement('div');
+  line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  panel.appendChild(line);
+  panel.scrollTop = panel.scrollHeight;
+  // Keep only last 20 lines
+  while (panel.children.length > 20) panel.removeChild(panel.firstChild);
+}
+
+/* ══════════════════════════════════════════════
+   INIT — runs after DOM is fully ready
+══════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  dbg('DOM ready');
+  setRegion(document.querySelector('.rtab.on'), 'any');
+  updateTrackUI();
+  loadIceConfig();
+  initSocket();
+  dbg('init complete — socket connecting...');
+});
 </script>
 </body>
 </html>
